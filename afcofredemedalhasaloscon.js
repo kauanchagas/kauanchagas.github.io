@@ -1,8 +1,6 @@
 (() => {
   'use strict';
 
-  /* O núcleo (afcofrenucleo.js) traz a hierarquia dos grupos, os motivos e o modelo da postagem.
-     Se a página não o carregou antes, ele é buscado na mesma pasta deste arquivo. */
   const CDN = 'https://cdn.jsdelivr.net/gh/kauanchagas/kauanchagas.github.io@master/';
   const ESTE = document.currentScript && document.currentScript.src;
   function comNucleo(fn) {
