@@ -1,11 +1,4 @@
-/* =====================================================================
-   [AF] COFRE DE MEDALHAS · SISTEMA DE ATUALIZAÇÃO
-   Roda no tópico do cofre de cada grupo de tarefas. Cada postagem que
-   está registrada na planilha ganha um cartão de status (para todos).
-   Membros da Auditoria Fiscal veem os botões: Aprovar, Negar,
-   Fiscalizar, Cancelar e o preenchimento automático do RCCSystem.
-   Usa o núcleo (afcofrenucleo.js): hierarquia, motivos e o BBCode.
-   ===================================================================== */
+
 (() => {
   'use strict';
   if (window.CofreSistema) return;
@@ -408,8 +401,19 @@ a:not(.btn):hover{text-decoration:underline;text-underline-offset:2px}
 .chip:hover{transform:translateY(-1px)}
 .chip[aria-pressed="true"]{box-shadow:inset 0 0 0 2px var(--verde-forte)}
 .chip[data-e="cancelado"] .nick{text-decoration:line-through;opacity:.7}
-.chip .flag{width:8px;height:8px;border-radius:50%;flex:none;margin-left:-2px}
-.flag-rcc{background:var(--erro)}.flag-porc{background:var(--azul)}.flag-teto{background:var(--aviso)}.flag-dup{background:var(--aviso)}
+/* policial destacado pela fiscalização: contorno e fundo na cor do problema */
+.chip[data-flag],.leg{--fc:245,158,11}
+.chip[data-flag="rcc"],.leg[data-flag="rcc"]{--fc:239,68,68}
+.chip[data-flag="porc"],.leg[data-flag="porc"]{--fc:59,130,246}
+.chip[data-flag]{background:rgba(var(--fc),.14);box-shadow:inset 0 0 0 2px rgba(var(--fc),.9)}
+.fundo[data-tema="escuro"] .chip[data-flag]{background:rgba(var(--fc),.22)}
+.chip[data-flag][aria-pressed="true"]{box-shadow:inset 0 0 0 2px rgb(var(--fc)),0 0 0 3px rgba(var(--fc),.35)}
+.chip .marca{display:grid;place-items:center;flex:none;margin-left:-2px;color:rgb(var(--fc))}
+.chip .marca svg{width:15px;height:15px}
+.legenda{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.leg{display:inline-flex;align-items:center;height:22px;padding:0 10px;border-radius:999px;font-size:11.5px;font-weight:600;color:var(--forte);
+  background:rgba(var(--fc),.14);box-shadow:inset 0 0 0 1.5px rgba(var(--fc),.9)}
+.sr{position:absolute;width:1px;height:1px;margin:-1px;padding:0;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0}
 .editor{padding:16px;border-radius:14px;background:var(--painel);box-shadow:inset 0 0 0 1px var(--linha);display:grid;gap:12px;animation:surge .2s ease both}
 .editor-topo{display:flex;align-items:center;gap:10px}
 .editor-topo img{width:36px;height:36px;border-radius:50%;object-fit:cover;object-position:center 12%;background:var(--sec-fundo)}
@@ -625,6 +629,12 @@ label.campo{display:grid;gap:6px;font-size:12px;font-weight:600;color:var(--suav
       while ((m = rxNum.exec(t))) {
         const d = +m[1], mes = +m[2], y = +m[3] < 100 ? 2000 + +m[3] : +m[3];
         if (d >= 1 && d <= 31 && mes >= 1 && mes <= 12) achados.push({ i: m.index, d, m: mes - 1, y });
+      }
+      // "01/10 a 15/10": dia e mês sem ano (o ano vem da data vizinha ou do ano atual)
+      const rxCurta = /(^|[^\d\/.])(\d{1,2})\/(\d{1,2})(?![\d\/])/g;
+      while ((m = rxCurta.exec(t))) {
+        const d = +m[2], mes = +m[3];
+        if (d >= 1 && d <= 31 && mes >= 1 && mes <= 12) achados.push({ i: m.index + m[1].length, d, m: mes - 1, y: null });
       }
       const rxExt = /(\d{1,2})\s*(?:de\s+)?([a-z]{3,9})\.?\s*(?:de\s+)?(\d{4})?/g;
       while ((m = rxExt.exec(t))) {
@@ -915,24 +925,34 @@ label.campo{display:grid;gap:6px;font-size:12px;font-weight:600;color:var(--suav
       return `<div class="fisc"><div class="fisc-topo">${ICONE.escudo}Fiscalização <small>${esc(dois(r.quando.getHours()) + ':' + dois(r.quando.getMinutes()))}</small><button type="button" class="ver refazer" data-acao="refazer">${ICONE.desfazer}refazer</button></div>${itens}</div>`;
     }
 
-    // Marca na própria postagem os policiais com problema (só na tela, nada é salvo).
+    // Problemas da fiscalização, do mais grave ao mais leve, com a cor de cada um (r,g,b).
+    const ORDEM_FLAGS = ['rcc', 'teto', 'dup', 'porc'];
+    const NOME_FLAG = { rcc: 'RCCSystem', teto: 'Teto', dup: 'Repetido', porc: 'Porcentagem' };
+    const COR_FLAG = { rcc: '239,68,68', teto: '245,158,11', dup: '245,158,11', porc: '59,130,246' };
+    const tipoMaisGrave = f => (f && f.length ? ORDEM_FLAGS.find(t => f.some(x => x.tipo === t)) || f[0].tipo : '');
+
+    // Marca na própria postagem os policiais com problema: contorno e fundo na cor (só na tela, nada é salvo).
     function destacarNaPostagem(st) {
       st.content.querySelectorAll('[data-af-destaque]').forEach(td => {
         td.style.boxShadow = td.dataset.afSombra || '';
-        td.style.outline = '';
+        td.style.backgroundColor = td.dataset.afFundo || '';
         td.removeAttribute('data-af-destaque');
+        td.removeAttribute('data-af-sombra');
+        td.removeAttribute('data-af-fundo');
         td.removeAttribute('title');
       });
       const flags = st.fisc && st.fisc.resultado ? st.fisc.resultado.flags : null;
       if (!flags || !flags.size) return;
-      const cores = { rcc: '#ef4444', porc: '#3b82f6', teto: '#f59e0b', dup: '#f59e0b' };
       st.content.querySelectorAll('td').forEach(td => {
         if (td.querySelector('td')) return;
         const f = flags.get(chaveNick(td.textContent));
         if (!f) return;
+        const cor = COR_FLAG[tipoMaisGrave(f)] || COR_FLAG.teto;
         td.dataset.afDestaque = '1';
         td.dataset.afSombra = td.style.boxShadow || '';
-        td.style.boxShadow = `inset 0 0 0 2px ${cores[f[0].tipo] || '#f59e0b'}`;
+        td.dataset.afFundo = td.style.backgroundColor || '';
+        td.style.boxShadow = `inset 0 0 0 2px rgb(${cor})`;
+        td.style.backgroundColor = `rgba(${cor},.16)`;
         td.title = f.map(x => x.texto).join(' · ');
       });
     }
@@ -1075,16 +1095,22 @@ label.campo{display:grid;gap:6px;font-size:12px;font-weight:600;color:var(--suav
           const nome = p.estado === 'corrigido' && p.novoNick.trim() ? p.novoNick.trim() : p.nick;
           const pill = p.estado === 'cancelado' ? `<span class="pill pill-can">${ICONE.x}Cancelado</span>` : p.estado === 'corrigido' ? `<span class="pill pill-cor">${ICONE.lapis}${p.medalhas !== '' ? sinal(Math.sign(reg.numero) * Math.abs(parseInt(p.medalhas, 10) || 0)) : 'Corrigido'}</span>` : `<span class="pill pill-ok">${ICONE.check}Aprovado</span>`;
           const titulo = f.map(x => x.texto).join(' · ');
-          return `<button type="button" class="chip" data-i="${i}" data-e="${p.estado}" aria-pressed="${A.sel === i}"${titulo ? ` title="${esc(titulo)}"` : ''}${A.correcao ? ' disabled' : ''}>
+          // Enquanto o auditor não cancela nem corrige, o policial com problema fica com contorno e fundo na cor do problema.
+          const flag = p.estado === 'aprovado' ? tipoMaisGrave(f) : '';
+          return `<button type="button" class="chip" data-i="${i}" data-e="${p.estado}"${flag ? ` data-flag="${flag}"` : ''} aria-pressed="${A.sel === i}"${titulo ? ` title="${esc(titulo)}"` : ''}${A.correcao ? ' disabled' : ''}>
             <img src="${esc(avatar(nome))}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.style.visibility='hidden'">
-            ${f.map(x => `<span class="flag flag-${x.tipo}"></span>`).filter((x, j, a) => a.indexOf(x) === j).join('')}<span class="nick">${esc(nome)}</span>${pill}</button>`;
+            ${flag ? `<span class="marca" aria-hidden="true">${ICONE.alerta}</span>` : ''}<span class="nick">${esc(nome)}</span>${pill}${flag ? `<span class="sr"> (alerta: ${esc(titulo)})</span>` : ''}</button>`;
         }).join('');
         const destacados = A.policiais.filter(p => p.estado === 'aprovado' && fl.has(chaveNick(p.nick)));
         let fiscHtml = '';
         if (!A.correcao) {
           if (st.fisc && st.fisc.estado === 'carregando') fiscHtml = `<div class="caixa-info" data-t="info">${ICONE.girar}<div>Fiscalizando os policiais...</div></div>`;
           else if (!st.fisc || st.fisc.estado === 'erro') fiscHtml = caixaInfo('aviso', ICONE.lupa, `<b>${st.fisc ? 'A fiscalização falhou.' : 'Ainda não fiscalizado.'}</b> <button type="button" class="ver" data-fiscalizar>fiscalizar agora</button>`);
-          else if (destacados.length) fiscHtml = caixaInfo('aviso', ICONE.alerta, `<b>${plural(destacados.length, 'policial destacado', 'policiais destacados')} pela fiscalização.</b><p>Toque em um policial para ver o motivo ou <button type="button" class="ver" data-cancelar-destacados>cancelar os destacados</button>.</p>`);
+          else if (destacados.length) {
+            const tipos = destacados.map(p => tipoMaisGrave(fl.get(chaveNick(p.nick))));
+            const legenda = ORDEM_FLAGS.filter(t => tipos.includes(t)).map(t => `<span class="leg" data-flag="${t}">${NOME_FLAG[t]}</span>`).join(' ');
+            fiscHtml = caixaInfo('aviso', ICONE.alerta, `<b>${plural(destacados.length, 'policial destacado', 'policiais destacados')} pela fiscalização.</b><p>Toque em um policial para ver o motivo ou <button type="button" class="ver" data-cancelar-destacados>cancelar os destacados</button>.</p><div class="legenda">${legenda}</div>`);
+          }
         }
         R('[data-policiais]').innerHTML = `<p class="secao">Policiais · ${A.policiais.length}${A.correcao ? '' : ' · toque para cancelar ou corrigir'}</p><div class="grade">${chips}</div>${fiscHtml ? '<div style="margin-top:12px">' + fiscHtml + '</div>' : ''}`;
 
@@ -1213,7 +1239,8 @@ label.campo{display:grid;gap:6px;font-size:12px;font-weight:600;color:var(--suav
         const c = pv.dados;
         if (c.pulou) { caixa.innerHTML = caixaInfo('info', ICONE.tabela, `<b>Contabilidade</b><p>${esc(c.texto)}</p>`); return; }
         const linhas = c.linhas.map(l => `<li>${esc(l.rotulo)}: ${l.positivas ? '+' + l.positivas + ' positivas' : ''}${l.positivas && l.negativas ? ', ' : ''}${l.negativas ? l.negativas + ' negativas' : ''}${l.nova ? ' (linha nova)' : ''}</li>`).join('');
-        caixa.innerHTML = caixaInfo(c.aproximado ? 'aviso' : 'ok', ICONE.tabela, `<b>Contabilidade:</b> ${esc(c.aba)} › ${esc(c.mes)} › ${esc(c.secao)}${c.periodo ? ' › ' + esc(c.periodo) : ''}${c.pagina ? ' · página ' + c.pagina : ''}
+        caixa.innerHTML = caixaInfo(c.aproximado || c.secaoAproximada ? 'aviso' : 'ok', ICONE.tabela, `<b>Contabilidade:</b> ${esc(c.aba)} › ${esc(c.mes)} › ${esc(c.secao)}${c.periodo ? ' › ' + esc(c.periodo) : ''}${c.pagina ? ' · página ' + c.pagina : ''}
+          ${c.secaoAproximada ? `<p>Neste mês a seção está escrita "${esc(c.secao)}" na planilha; o lançamento vai nela.</p>` : ''}
           ${c.aproximado ? `<p>O período da postagem (${esc(reg.periodo)}) não existe igual na planilha; vai para ${esc(c.periodo || c.secao)}.</p>` : ''}<ul>${linhas}</ul>`);
       }
 
