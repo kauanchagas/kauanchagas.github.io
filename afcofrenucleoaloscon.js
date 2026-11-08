@@ -998,7 +998,7 @@
     if (nick) p.set('nick', nick);
     if (!temporarias && grupo) p.set('companyUnit', grupo.nome || grupo);
     if (periodo) p.set('period', periodo);
-    if (alvos && alvos.length) p.set('targets', alvos.join('/'));
+    if (alvos && alvos.length) p.set('targets', alvos.join(' / '));
     if (medalhas != null) p.set('medals', String(medalhas));
     if (motivo) {
       // Nas temporárias o RCCSystem não pede o grupo, então ele vai no motivo.
